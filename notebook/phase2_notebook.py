@@ -604,8 +604,16 @@ if samples_path:
 else:
     S = []
 HAVE_SAMPLES = bool(S)
-with open(test_path, encoding="utf-8", newline="") as f:
-    T = [_clean(dict(r)) for r in csv.DictReader(f)]
+# encoding="utf-8-sig" strips a leading UTF-8 BOM if present and is a no-op
+# otherwise. Without it a BOM makes csv.DictReader name the first column
+# '﻿id' rather than 'id', and every later r["id"] raises KeyError -- in a
+# writer that has ALREADY truncated submission.csv, which turns a cosmetic
+# encoding difference into a zero-row file and a disqualifying DNF. The header
+# keys are also stripped and lower-cased so 'ID', ' id' and 'Id' all land as
+# 'id'. All four real columns are already lower-case, so nothing else changes.
+with open(test_path, encoding="utf-8-sig", newline="") as f:
+    T = [_clean({(k or "").strip().lower(): v for k, v in r.items()})
+         for r in csv.DictReader(f)]
 
 CTX_T = [i for i, r in enumerate(T) if r["context"]]
 CB_T = [i for i, r in enumerate(T) if not r["context"]]
@@ -636,11 +644,16 @@ V23_CB_DEFAULT = 0
 
 
 def _write_submission(pred):
+    # Build EVERY row in memory before opening the file. Opening in "w" mode
+    # truncates immediately, so any exception raised mid-loop used to destroy a
+    # previously valid submission.csv and leave a header-only file -- the exact
+    # opposite of what this crash-safety writer exists to guarantee. Materialise
+    # first, then write; a failure now leaves the last good file intact.
+    rows = [["id", "label"]]
+    for i, (r, p) in enumerate(zip(T, pred)):
+        rows.append([r.get("id", i + 1), int(p)])
     with open(SUBMISSION_PATH, "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["id", "label"])
-        for r, p in zip(T, pred):
-            w.writerow([r["id"], int(p)])
+        csv.writer(f).writerows(rows)
 
 
 def emit_submission(tag=""):
@@ -714,8 +727,9 @@ for _name in REFERENCE_PRED_NAMES:
         break
 REF_PRED, REF_ORDER = None, None
 if REF_PRED_PATH:
-    with open(REF_PRED_PATH, encoding="utf-8", newline="") as f:
-        _ref_rows = list(csv.DictReader(f))
+    with open(REF_PRED_PATH, encoding="utf-8-sig", newline="") as f:
+        _ref_rows = [{(k or "").strip().lower(): v for k, v in _r.items()}
+                     for _r in csv.DictReader(f)]
     REF_PRED = {str(row["id"]).strip(): int(row["label"]) for row in _ref_rows}
     REF_ORDER = [str(row["id"]).strip() for row in _ref_rows]
     print(f"reference predictions: {REF_PRED_PATH} ({len(REF_PRED)} rows)")
