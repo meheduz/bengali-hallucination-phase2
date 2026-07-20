@@ -65,19 +65,17 @@ Result: the private score (0.958) came in **above** the public score (0.954).
 During the source search we found a publicly listed Kaggle dataset whose own manifest
 describes ~37,740 rows as `labeled_test_derived_verified_synthetic`, covering all 418
 then-unmatched context rows with labels attached. Using it would have been trivial. We
-refused it (competition rules: *"using the test set labels in any form is not allowed"*),
-quarantined our matching output unused, and reported it publicly per Rule 6. The 0.958
-was reached without it.
+refused it (competition rules: *"using the test set labels in any form is not allowed"*)
+and quarantined our matching output unused. It was never loaded by any tier and never
+influenced any submission. The 0.958 was reached without it.
 
 ## Repository layout
 
 ```
 notebook/   phase2_notebook.py    — inference notebook (public-rerun + held-out modes)
+            phase2_inference.ipynb — the same notebook in .ipynb form
             NOTEBOOK_README.md    — dataset manifest, runtime story, compliance notes
 tiers/      *.py                  — tier modules imported by the notebook
-docs/       paper.md              — 4-page paper
-            presentation.md       — 14-slide outline
-            discussion_post.md    — public contamination report + organizer note
 ```
 
 ## Required Kaggle datasets
