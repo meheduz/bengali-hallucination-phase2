@@ -504,15 +504,106 @@ def _clean(r):
     return r
 
 
-samples_path = find_input(SAMPLES_FILE, os.path.join(LOCAL_DATA_DIR, SAMPLES_FILE))
-test_path = find_input(TEST_FILE, os.path.join(LOCAL_DATA_DIR, TEST_FILE))
-print("samples:", samples_path)
+# --- MOUNT INVENTORY -------------------------------------------------------
+# Printed first so that ANY failure below can be diagnosed from the log alone:
+# it shows exactly which datasets/models/competitions were attached, which is
+# the single most common cause of a failed organiser rerun.
+if os.path.isdir("/kaggle/input"):
+    print("MOUNTS under /kaggle/input:")
+    for _d in sorted(os.listdir("/kaggle/input")):
+        try:
+            _n = sum(len(fs) for _, _, fs in os.walk(f"/kaggle/input/{_d}"))
+        except Exception:
+            _n = -1
+        print(f"   {_d}  ({_n} files)")
+else:
+    print("MOUNTS: /kaggle/input does not exist (local dev run)")
+
+# The labelled sample split is OPTIONAL. The organisers have stated that
+# "dataset samples.json" will be ABSENT from the held-out fold, so treating it
+# as required would turn a missing file into a FileNotFoundError before any
+# submission.csv exists -- i.e. a DNF, which is disqualifying. It is loaded
+# when present (it powers the exact-leak layer and the per-tier validation
+# printouts) and degrades to an empty split when not. Every consumer of S is
+# guarded: the leak layer contributes 0 rows, validation gates print
+# "unavailable" instead of a score, and the tier shim hands out an empty list.
+# No prediction path depends on it.
+samples_path = find_input(SAMPLES_FILE, os.path.join(LOCAL_DATA_DIR, SAMPLES_FILE),
+                          required=False)
+def resolve_test_csv():
+    """Pick the RIGHT 'test set.csv' when more than one is mounted.
+
+    WHY THIS EXISTS. The Phase-1 competition ('bengali-hallucination') and the
+    Phase-2 evaluation competition ('iut-2026-datathon-phase-2-evaluation')
+    BOTH ship a file called 'test set.csv'. If an organiser attaches both, a
+    plain sorted-glob resolves to whichever sorts first -- and 'bengali-...'
+    sorts before 'iut-...', so the notebook would silently score the PHASE-1
+    rows and emit predictions for the wrong data. That is worse than crashing,
+    because it fails quietly and looks like a valid run.
+
+    Rule: prefer a mount whose path names the held-out/evaluation competition;
+    otherwise fall back to the sorted-glob answer. Every candidate and the
+    final choice are printed so the selection is auditable from the log.
+    """
+    cands = sorted(glob.glob(f"/kaggle/input/**/{TEST_FILE}", recursive=True))
+    if not cands:
+        local = os.path.join(LOCAL_DATA_DIR, TEST_FILE)
+        if os.path.exists(local):
+            return local
+        # Name-based lookup failed. The held-out fold may ship the test file
+        # under a different NAME (test.csv, test_set.csv, heldout.csv, ...).
+        # Rather than DNF on a rename, sniff every mounted CSV for the known
+        # schema and take the largest match. Losing the round to a filename
+        # would be the most avoidable failure possible.
+        want = {"id", "prompt_bn", "response_bn"}
+        sniffed = []
+        for p in glob.glob("/kaggle/input/**/*.csv", recursive=True):
+            try:
+                with open(p, encoding="utf-8", newline="") as fh:
+                    cols = set(next(csv.reader(fh)))
+            except Exception:
+                continue
+            if want <= cols:
+                sniffed.append((os.path.getsize(p), p))
+        if sniffed:
+            sniffed.sort(reverse=True)
+            print(f"NOTE: no file named {TEST_FILE!r}; sniffed the test schema "
+                  f"{want} and matched {len(sniffed)} CSV(s).")
+            print(f"   -> using {sniffed[0][1]}")
+            return sniffed[0][1]
+        return None
+    if len(cands) > 1:
+        print(f"NOTE: {len(cands)} '{TEST_FILE}' files are mounted:")
+        for c in cands:
+            print("   -", c)
+    PREFER = ("phase-2", "phase2", "evaluation", "eval", "held-out", "heldout")
+    for c in cands:
+        low = c.lower()
+        if any(k in low for k in PREFER):
+            if len(cands) > 1:
+                print(f"   -> chose {c} (path names the evaluation competition)")
+            return c
+    if len(cands) > 1:
+        print(f"   -> no evaluation-named mount; falling back to {cands[0]}")
+    return cands[0]
+
+
+test_path = resolve_test_csv()
+if test_path is None:
+    raise FileNotFoundError(
+        f"{TEST_FILE!r} not found under /kaggle/input. Attach the competition "
+        f"dataset. (Mounted dirs: {sorted(os.listdir('/kaggle/input')) if os.path.isdir('/kaggle/input') else 'none'})")
+print("samples:", samples_path or "ABSENT -> leak layer + validation disabled")
 print("test   :", test_path)
 
-with open(samples_path, encoding="utf-8") as f:
-    S = [_clean(dict(r)) for r in json.load(f)]
-for r in S:
-    r["label"] = int(r["label"])
+if samples_path:
+    with open(samples_path, encoding="utf-8") as f:
+        S = [_clean(dict(r)) for r in json.load(f)]
+    for r in S:
+        r["label"] = int(r["label"])
+else:
+    S = []
+HAVE_SAMPLES = bool(S)
 with open(test_path, encoding="utf-8", newline="") as f:
     T = [_clean(dict(r)) for r in csv.DictReader(f)]
 

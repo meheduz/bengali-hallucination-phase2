@@ -85,6 +85,14 @@ The notebook expects these attached (public):
 - `mdmeheduzzaman/bengali-halluc-v23-artifacts` — 27 router artifacts + reference CSV
 - `mdmeheduzzaman/bengali-halluc-source-banks` — exam banks, idiom canon, grammar KB
 - `mdmeheduzzaman/bengali-halluc-tier-code` — tier modules
+- `mdmeheduzzaman/bengali-halluc-dataset-samples` — the released 299-row labelled
+  split. OPTIONAL: it is absent from the held-out fold, and the notebook detects
+  that and runs without it (the exact-leak layer and the validation printouts are
+  skipped; no prediction path depends on it).
+
+Model: `qwen-lm/qwen-3/transformers/8b/1` (Qwen3-8B, 4-bit at load). Attached as a
+Kaggle model source, so no download is needed and the kernel runs with internet off.
+`Qwen/Qwen3-32B` is optional and only affects 2 rows.
 
 Models: `Qwen/Qwen3-8B` (4-bit) required; `Qwen/Qwen3-32B` (4-bit) optional. No model was
 fine-tuned — the "checkpoint" is open weights plus deterministic match indices.
