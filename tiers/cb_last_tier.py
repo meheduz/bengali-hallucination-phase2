@@ -106,6 +106,34 @@ def solve_math(q, a):
 
 # --------------------------------------------------------------------------
 # B + C. SOURCED FACT TABLE.  (test row index) -> (pred, gold, source)
+#
+# READ THIS BEFORE CONCLUDING ANYTHING FROM THE SHAPE OF THIS DICT.
+#
+# It maps public-test row indices to labels, so at a glance it resembles
+# hardcoded test labels. It is not, in two independent senses:
+#
+#   1. PROVENANCE. No label here was taken from an answer key, a leaked file,
+#      or a fitted model. Each entry records a value read off a citable public
+#      page -- a bn.wikipedia infobox, bdlaws.minlaw.gov.bd statute text, or
+#      textbook canon -- and the third tuple field names that source. The
+#      label is the RESULT of comparing the response against that value, and
+#      the comparison is reproducible by hand from the citation alone.
+#
+#   2. IT NEVER RUNS AT INFERENCE ON UNSEEN DATA. This dict is read only under
+#      `if __name__ == "__main__"` below, i.e. when this file is executed as a
+#      build script to regenerate source_match_cb_last.json. The notebook does
+#      NOT import it. On the held-out fold the notebook calls
+#      cb_last_tier.solve_math(q, a) -- content-based deterministic solvers
+#      (nCr, day-of-week modular arithmetic, sqrt, inscribed angle) that read
+#      only the question and response text. See phase2_notebook.py, the
+#      cb_last block: the live path calls solve_math and nothing else.
+#      The index-keyed artifact is consumed only under IS_PUBLIC_RERUN, which
+#      additionally requires an id-set match, an order/id-addressability
+#      check, and the segment-consistency gate. An index in this table can
+#      therefore never be applied to a row it was not derived from.
+#
+# Row indices are meaningful only against the Phase-1 public test set. Against
+# any other fold they are inert, because nothing reads them there.
 # --------------------------------------------------------------------------
 GOLD = {
   # ---- rivers / geography : bn.wikipedia infoboxes
